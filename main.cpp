@@ -8,8 +8,10 @@ int sign(float input) {
     else return -1;
 }
 
-void linear_regression(float *model, float *input, int epochs) {
-    assert(epochs > 0 && input && model);
+void linear_regression(float *model, float *input) {
+    assert(model && *model);
+    assert(input && *input);
+
 
 }
 
