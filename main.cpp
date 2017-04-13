@@ -7,6 +7,19 @@ int sign(float input) {
     else return -1;
 }
 
+int get_random_example(float *inputs) {
+    assert(inputs && *inputs);
+
+    srand((unsigned int) time(NULL));
+    const int size = (sizeof(inputs) / sizeof(*inputs));
+    return rand() % size;
+}
+
+template<typename T>
+T two_dim_get(const T *array, int width, int i, int j) {
+    return array[width * j + i];
+}
+
 void linear_regression(float *model, float *input) {
     assert(model && *model);
     assert(input && *input);
@@ -20,19 +33,6 @@ void linear_regression(float *model, float *input) {
 
         }
     }
-}
-
-int get_random_example(float *inputs) {
-    assert(inputs && *inputs);
-
-    srand((unsigned int) time(NULL));
-    const int size = (sizeof(inputs) / sizeof(*inputs));
-    return rand() % size;
-}
-
-template<typename T>
-T two_dim_get(const T *array, int width, int i, int j) {
-    return array[width * j + i];
 }
 
 int main() {
