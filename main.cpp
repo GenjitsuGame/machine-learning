@@ -2,7 +2,7 @@
 #include <cassert>
 
 
-int sign(float input) {
+int sign(const float &input) {
     if (input >= 0) return 1;
     else return -1;
 }
@@ -16,23 +16,30 @@ int get_random_example(float *inputs) {
 }
 
 template<typename T>
-T two_dim_get(const T *array, int width, int i, int j) {
-    return array[width * j + i];
+T &two_dim_get(const T *array, const int &width, int &x, int &y) {
+    return array[width * y + x];
 }
 
-void linear_regression(float *model, float *input) {
+template<typename T>
+void two_dim_set(const T *&array, const int &width, int &x, int &y, T e) {
+    array[width * y + x] = e;
+}
+
+float linear_regression(float *&model, float *&input) {
     assert(model && *model);
     assert(input && *input);
 
     const int modelSize = (sizeof(model) / sizeof(*model));
     const int inputSize = (sizeof(input) / sizeof(*input));
-    int *outputs = new int[modelSize * inputSize];
+    assert(modelSize == inputSize);
+
+    float weightedSum = 0;
 
     for (int i = 0; i < inputSize; ++i) {
-        for (int j = 0; j < modelSize; ++j) {
-
-        }
+        weightedSum += input[i] * model[i];
     }
+
+    return weightedSum;
 }
 
 int main() {
