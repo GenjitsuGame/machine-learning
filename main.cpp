@@ -25,7 +25,7 @@ void two_dim_set(const T *&array, const int &width, int &x, int &y, T e) {
     array[width * y + x] = e;
 }
 
-float linear_regression(float *&model, float *&input) {
+float linear_regression(float *model, float *input) {
     assert(model && *model);
     assert(input && *input);
 
@@ -40,6 +40,13 @@ float linear_regression(float *&model, float *&input) {
     }
 
     return weightedSum;
+}
+
+float linear_classification(float *model, float *input) {
+    assert(model && *model);
+    assert(input && *input);
+
+    return sign(linear_regression(model, input));
 }
 
 int main() {
