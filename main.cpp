@@ -1,33 +1,45 @@
 #include <iostream>
 #include <cassert>
+#include <cmath>
+#include "Eigen/Core"
+#include "Eigen/Dense"
 
 void init() {
     srand(static_cast <unsigned> (time(0)));
     std::cout << std::boolalpha;
+    std::cout.precision(25);
 }
 
-int sign(float const &input) {
+int sign(double input) {
     if (input >= 0) return 1;
     else return -1;
 }
 
-float get_random_float(float const min, float const max) {
-    return min + static_cast <float> (rand()) / ((RAND_MAX / (max - min)));
+double activation(double &x) {
+    return (double) (1.f / (1.f + exp(-x)));
 }
 
-float **const get_random_model(int const *const inputs, int const inputsSize) {
+double activation_derivative(double &x) {
+    return activation(x) * (1 - activation(x));
+}
+
+double get_random_double(double min, double max) {
+    return min + static_cast <double> (rand()) / ((RAND_MAX / (max - min)));
+}
+
+double **get_random_model(int *inputs, int inputsSize) {
     assert(inputs && *inputs && inputsSize > 0);
 
-    float **const model = new float *[inputsSize];
+    double **model = new double *[inputsSize];
 
     for (int i = 0; i < inputsSize; ++i) {
         if (inputs[i] <= 0) {
             throw new std::out_of_range("Number of inputs must be greater than 0.");
         }
 
-        model[i] = new float[inputs[i]];
+        model[i] = new double[inputs[i]];
         for (int j = 0; j < inputs[i]; ++j) {
-            model[i][j] = get_random_float(-1.f, 1.f);
+            model[i][j] = get_random_double(-1.f, 1.f);
         }
     }
 
@@ -35,17 +47,17 @@ float **const get_random_model(int const *const inputs, int const inputsSize) {
 }
 
 template<typename T>
-T *two_dim_get(T *const &array, int const &width, int const &x, int const &y) {
+T *two_dim_get(T *&array, int &width, int &x, int &y) {
     return (array + width * y + x);
 }
 
 template<typename T>
-void two_dim_set(T *const &array, int const &width, int const x, int const y, T e) {
+void two_dim_set(T *&array, int &width, int x, int y, T e) {
     array[width * y + x] = e;
 }
 
 template<typename T>
-int get_random_example_pos(T const *const examples, int const examplesSize, int const inputSize) {
+int get_random_example_pos(T *examples, int examplesSize, int inputSize) {
     assert(examples);
     assert(examplesSize > 0);
     assert(inputSize > 0);
@@ -55,8 +67,8 @@ int get_random_example_pos(T const *const examples, int const examplesSize, int 
 
 
 template<typename T>
-T *const *const get_example_at(T *const examples, int const inputSize, int const pos) {
-    T **const example = new T *[inputSize];
+T **get_example_at(T *examples, int inputSize, int pos) {
+    T **example = new T *[inputSize];
 
     for (int i = 0; i < inputSize; ++i) {
         example[i] = two_dim_get(examples, inputSize, i, pos);
@@ -66,8 +78,8 @@ T *const *const get_example_at(T *const examples, int const inputSize, int const
 }
 
 void
-perceptron_learning_algorithm(float *const model, float const *const inputs, int const inputsSize,
-                              int desiredOutput, float learningRate) {
+perceptron_learning_algorithm(double *model, double *inputs, int inputsSize,
+                              int desiredOutput, double learningRate) {
     assert(inputs);
     assert(inputsSize > 0);
     assert(model);
@@ -78,12 +90,11 @@ perceptron_learning_algorithm(float *const model, float const *const inputs, int
     }
 }
 
-float linear_regression(float *model, int const modelSize, float const *const *const inputs, int const inputSize) {
+double linear_regression(double *model, double **inputs, int inputSize) {
     assert(model);
     assert(inputs);
-    assert(modelSize == inputSize);
 
-    float weightedSum = 0;
+    double weightedSum = 0;
 
     for (int i = 0; i < inputSize; ++i) {
         weightedSum += *(inputs[i]) * model[i];
@@ -92,46 +103,53 @@ float linear_regression(float *model, int const modelSize, float const *const *c
     return weightedSum;
 }
 
-float *
-create_linear_regression_model(const float *const examples, const int examplesSize, const int inputSize,
-                               const int *const desiredOutputs, const int epochs, const float learningRate) {
+double *
+create_linear_regression_model(double *examples, int examplesSize, int inputSize,
+                               double *desiredOutputs) {
     assert(examples);
     assert(desiredOutputs);
     assert(inputSize > 0);
-    assert(epochs > 0);
 
-    float *model = get_random_model(new int[1]{inputSize}, 1)[0];
+    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> mExamples(examples, examplesSize,
+                                                                                                 inputSize);
+    Eigen::MatrixXd tmExamples = mExamples.transpose();
+    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> mOutputs(desiredOutputs,
+                                                                                                examplesSize, 1);
 
-    for (int i = 0; i < epochs; ++i) {
-        const int pos = get_random_example_pos(examples, examplesSize, inputSize);
-        float const *const *const example = get_example_at(examples, inputSize, pos);
-        float const output = linear_regression(model, inputSize, example, inputSize);
+    Eigen::MatrixXd product1(tmExamples * mExamples);
 
+    Eigen::MatrixXd result = product1.inverse() * tmExamples * mOutputs;
+
+    double *resultArray = new double[result.size()];
+    for (int i = 0; i < result.size(); ++i) {
+        resultArray[i] = result.data()[i];
     }
 
+    return resultArray;
 }
 
-int linear_classification(float * const model, int const modelSize, float const *const *const inputs, const int inputSize) {
+int
+linear_classification(double *model, double **inputs, int inputSize) {
     assert(model && *model);
     assert(inputs && *inputs);
 
-    return sign(linear_regression(model, modelSize, inputs, inputSize));
+    return sign(linear_regression(model, inputs, inputSize));
 }
 
-float *
-create_linear_classification_model(const float *const examples, const int examplesSize, const int inputSize,
-                                   const int *const desiredOutputs, const int epochs, const float learningRate) {
+double *
+create_linear_classification_model(double *examples, int examplesSize, int inputSize,
+                                   int *desiredOutputs, int epochs, double learningRate) {
     assert(examples);
     assert(desiredOutputs);
     assert(inputSize > 0);
     assert(epochs > 0);
 
-    float *const model = get_random_model(new int[1]{inputSize}, 1)[0];
+    double *model = get_random_model(new int[1]{inputSize}, 1)[0];
 
     for (int i = 0; i < epochs; ++i) {
-        const int pos = get_random_example_pos(examples, examplesSize, inputSize);
-        float const *const *const example = get_example_at(examples, inputSize, pos);
-        const int output = linear_classification(model, inputSize, example, inputSize);
+        int pos = get_random_example_pos(examples, examplesSize, inputSize);
+        double **example = get_example_at(examples, inputSize, pos);
+        int output = linear_classification(model, example, inputSize);
         if (output != desiredOutputs[pos]) {
             perceptron_learning_algorithm(model, *example, inputSize, desiredOutputs[pos], learningRate);
         }
@@ -140,26 +158,35 @@ create_linear_classification_model(const float *const examples, const int exampl
     return model;
 }
 
+int mlp_linear_regression();
+
 // TEST
 
-const int classificationExamplesSize = 4;
-const int classificationExampleSize = 2;
-const float *const classificationExamples = new float[classificationExamplesSize * classificationExampleSize]{-1, -1,
-                                                                                                              -1,
-                                                                                                              1, 1, -1,
-                                                                                                              1, 1};
-const int *const classificationDesiredOutputs = new int[classificationExamplesSize]{-1, -1, 1, 1};
+int regressionExamplesSize = 4;
+int regressionExampleSize = 1;
+double *regressionExamples = new double[regressionExamplesSize * regressionExampleSize]{100, 200, 400, 500};
+double *regressionDesiredOutputs = new double[regressionExamplesSize * regressionExampleSize]{200, 400, 800,
+                                                                                              1000};
+
+int classificationExamplesSize = 4;
+int classificationExampleSize = 2;
+double *classificationExamples = new double[classificationExamplesSize * classificationExampleSize]{-1, -1,
+                                                                                                    -1,
+                                                                                                    1, 1,
+                                                                                                    -1,
+                                                                                                    1, 1};
+int *classificationDesiredOutputs = new int[classificationExamplesSize]{-1, -1, 1, 1};
 
 void test_get_example() {
-    float const *const *const example = get_example_at(classificationExamples, classificationExampleSize, 1);
+    double **example = get_example_at(classificationExamples, classificationExampleSize, 1);
     assert(*example == (classificationExamples + 2));
 }
 
 void test_get_random_model() {
-    const int layersSize = 3;
-    const int *layersSizes = new int[layersSize]{4, 3, 5};
+    int layersSize = 3;
+    int *layersSizes = new int[layersSize]{4, 3, 5};
 
-    float **const model = get_random_model(layersSizes, layersSize);
+    double **model = get_random_model(layersSizes, layersSize);
     for (int i = 0; i < layersSize; ++i) {
         for (int j = 0; j < layersSizes[i]; ++j) {
             assert(model[i][j]);
@@ -171,15 +198,30 @@ void test_get_random_model() {
     delete[] layersSizes;
 }
 
+void test_linear_regression() {
+    double *model = new double[regressionExampleSize]{2};
+    double input = 300;
+    double **inputs = new double *[1]{&input};
+    double output = linear_regression(model, inputs, regressionExampleSize);
+
+    assert(output == 600);
+}
+
+void test_create_linear_regression_model() {
+    double *model = create_linear_regression_model(regressionExamples, regressionExamplesSize, regressionExampleSize,
+                                                   regressionDesiredOutputs);
+    assert(1.99999 <= model[0] <= 2);
+}
+
 void test_linear_classification() {
-    const int layersSize = 1;
-    const int *layersSizes = new int[layersSize]{1};
-    const int modelSize = 2;
-    float *const model = new float[modelSize]{1, -1};
-    const int desiredOutput = -1;
-    const int examplePos = 1;
-    float const *const *const example = get_example_at(classificationExamples, classificationExampleSize, examplePos);
-    const int output = linear_classification(model, modelSize, example, classificationExampleSize);
+    int layersSize = 1;
+    int *layersSizes = new int[layersSize]{1};
+    int modelSize = 2;
+    double *model = new double[modelSize]{1, -1};
+    int desiredOutput = -1;
+    int examplePos = 1;
+    double **example = get_example_at(classificationExamples, classificationExampleSize, examplePos);
+    int output = linear_classification(model, example, classificationExampleSize);
 
     assert(desiredOutput == output);
 
@@ -188,16 +230,15 @@ void test_linear_classification() {
 }
 
 void test_create_linear_classification_model() {
-    int const epochs = 2000;
-    int const desiredOutput = -1;
-    int const examplePos = 1;
-    float const learningRate = 0.01;
-    float const *const *const example = get_example_at(classificationExamples, classificationExampleSize, examplePos);
-    int const output = linear_classification(
+    int epochs = 2000;
+    int desiredOutput = -1;
+    int examplePos = 1;
+    double learningRate = 0.01;
+    double **example = get_example_at(classificationExamples, classificationExampleSize, examplePos);
+    int output = linear_classification(
             create_linear_classification_model(classificationExamples, classificationExamplesSize,
                                                classificationExampleSize, classificationDesiredOutputs, epochs,
-                                               learningRate), classificationExampleSize, example,
-            classificationExampleSize);
+                                               learningRate), example, classificationExampleSize);
 
     assert(desiredOutput == output);
 }
@@ -206,6 +247,8 @@ void test() {
     init();
     test_get_example();
     test_get_random_model();
+    test_linear_regression();
+    test_create_linear_regression_model();
     test_linear_classification();
     test_create_linear_classification_model();
 }
