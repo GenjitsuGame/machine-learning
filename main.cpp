@@ -191,7 +191,38 @@ double *add_bias_input(double *inputs, int inputsSize) {
     return inputsWithBias;
 }
 
-double **mlp_feed_forward_classification(double ***model, int *modelStruct, int modelStructSize, double *inputs,
+double **mlp_regression_feed_forward(double ***model, int *modelStruct, int modelStructSize, double *inputs,
+                                     int inputsSize) {
+    double **outputs = new double *[modelStructSize];
+    double *inputsWithBias = add_bias_input(inputs, inputsSize);
+    inputsSize += 1;
+    for (int i = 0; i < modelStructSize - 1; ++i) {
+        outputs[i] = new double[modelStruct[i]]{0};
+        for (int j = 0; j < modelStruct[i] - 1; ++j) {
+            if (i == 0) {
+                for (int k = 0; k < inputsSize; ++k) {
+                    outputs[i][j] += inputsWithBias[k] * model[i][j][k];
+                }
+            } else {
+                for (int k = 0; k < modelStruct[i - 1]; ++k) {
+                    outputs[i][j] += outputs[i - 1][k] * model[i][j][k];
+                }
+            }
+        }
+        outputs[i][modelStruct[i] - 1] = 1;
+    }
+
+    outputs[modelStructSize - 1] = new double[modelStruct[modelStructSize - 1]];
+    outputs[modelStructSize - 1][0] = 0;
+    for (int i = 0; i < modelStruct[modelStructSize - 2]; ++i) {
+        outputs[modelStructSize - 1][0] += outputs[modelStructSize - 2][i] * model[modelStructSize - 1][0][i];
+    }
+
+    return outputs;
+}
+
+
+double **mlp_classification_feed_forward(double ***model, int *modelStruct, int modelStructSize, double *inputs,
                                          int inputsSize) {
     double **outputs = new double *[modelStructSize];
     double *inputsWithBias = add_bias_input(inputs, inputsSize);
@@ -218,17 +249,51 @@ double **mlp_feed_forward_classification(double ***model, int *modelStruct, int 
     for (int i = 0; i < modelStruct[modelStructSize - 2]; ++i) {
         outputs[modelStructSize - 1][0] += outputs[modelStructSize - 2][i] * model[modelStructSize - 1][0][i];
     }
-    //std::cout << "avant : " << std::endl;
-    //print_outputs(outputs, modelStruct, modelStructSize);
+
     outputs[modelStructSize - 1][0] = activation(outputs[modelStructSize - 1][0]);
-    //std::cout << "apres : " << std::endl;
-    //print_outputs(outputs, modelStruct, modelStructSize);
     return outputs;
 }
 
 
 void mlp_update_weight(double &weight, double &learningRate, double &output, double &error) {
     weight = weight - learningRate * output * error;
+}
+
+
+void mlp_regression_back_propagate(double ***model, int *modelStruct, int modelStructSize, double *inputs,
+                                   int inputsSize, double **outputs, double *desiredOutputs, double &learningRate) {
+    double **errors = new double *[modelStructSize];
+
+    int lastLayer = modelStructSize - 1;
+    errors[lastLayer] = new double[modelStruct[lastLayer]];
+    for (int i = 0; i < modelStruct[lastLayer]; ++i) {
+        errors[lastLayer][i] = outputs[lastLayer][i] - desiredOutputs[i];
+    }
+
+    for (int i = lastLayer - 1; i >= 0; --i) {
+        errors[i] = new double[modelStruct[i]];
+        for (int j = 0; j < modelStruct[i]; ++j) {
+            int error = 0;
+            for (int k = 0; k < modelStruct[i + 1]; ++k) {
+                error += model[i + 1][k][j] * errors[i + 1][k];
+            }
+            errors[i][j] = (1 - pow(outputs[i][j], 2)) * error;
+        }
+    }
+
+    for (int i = 0; i < modelStructSize; ++i) {
+        for (int j = 0; j < modelStruct[i]; ++j) {
+            if (i == 0) {
+                for (int k = 0; k < inputsSize; ++k) {
+                    mlp_update_weight(model[i][j][k], learningRate, inputs[k], errors[i][j]);
+                }
+            } else {
+                for (int k = 0; k < modelStruct[i - 1]; ++k) {
+                    mlp_update_weight(model[i][j][k], learningRate, outputs[i - 1][k], errors[i][j]);
+                }
+            }
+        }
+    }
 }
 
 void mlp_classification_back_propagate(double ***model, int *modelStruct, int modelStructSize, double *inputs,
@@ -269,9 +334,16 @@ void mlp_classification_back_propagate(double ***model, int *modelStruct, int mo
 
 void mlp_classification_fit(double ***model, int *modelStruct, int modelStructSize, double *inputs, int inputsSize,
                             int *desiredOutput, double learningRate) {
-    double **outputs = mlp_feed_forward_classification(model, modelStruct, modelStructSize, inputs, inputsSize);
+    double **outputs = mlp_classification_feed_forward(model, modelStruct, modelStructSize, inputs, inputsSize);
     mlp_classification_back_propagate(model, modelStruct, modelStructSize, inputs, inputsSize, outputs, desiredOutput,
                                       learningRate);
+}
+
+void mlp_regression_fit(double ***model, int *modelStruct, int modelStructSize, double *inputs, int inputsSize,
+                        double *desiredOutput, double learningRate) {
+    double **outputs = mlp_regression_feed_forward(model, modelStruct, modelStructSize, inputs, inputsSize);
+    mlp_regression_back_propagate(model, modelStruct, modelStructSize, inputs, inputsSize, outputs, desiredOutput,
+                                  learningRate);
 }
 
 void
@@ -286,12 +358,34 @@ mlp_classification_train(double ***model, int *modelStruct, int modelStructSize,
     }
 }
 
+void
+mlp_regression_train(double ***model, int *modelStruct, int modelStructSize, double *examples, int examplesSize,
+                     int inputsSize,
+                     double **desiredOutputs, double learningRate, int epochs) {
+    for (int i = 0; i < epochs; ++i) {
+        int pos = get_random_example_pos(examples, examplesSize, inputsSize);
+        double *example = get_example_at(examples, inputsSize, pos);
+        mlp_regression_fit(model, modelStruct, modelStructSize, example, inputsSize, desiredOutputs[pos],
+                           learningRate);
+    }
+}
+
 double ***mlp_classification_create_model(int *modelStruct, int modelStructSize, double *examples, int examplesSize,
                                           int inputsSize,
                                           int **desiredOutputs, double learningRate, int epochs) {
     double ***model = get_random_model(modelStruct, modelStructSize, inputsSize);
     mlp_classification_train(model, modelStruct, modelStructSize, examples, examplesSize, inputsSize, desiredOutputs,
                              learningRate, epochs);
+
+    return model;
+}
+
+double ***mlp_regression_create_model(int *modelStruct, int modelStructSize, double *examples, int examplesSize,
+                                      int inputsSize,
+                                      double **desiredOutputs, double learningRate, int epochs) {
+    double ***model = get_random_model(modelStruct, modelStructSize, inputsSize);
+    mlp_regression_train(model, modelStruct, modelStructSize, examples, examplesSize, inputsSize, desiredOutputs,
+                         learningRate, epochs);
 
     return model;
 }
@@ -431,11 +525,34 @@ void test_mlp_classification() {
                                                       classificationExamplesSize,
                                                       classificationExampleSize,
                                                       classificationDesiredOutputs, 0.01, 10000);
-    double **outputs = mlp_feed_forward_classification(model, modelStruct, modelStructSize, new double[2]{1, 1}, 2);
+    double **outputs = mlp_classification_feed_forward(model, modelStruct, modelStructSize, new double[2]{1, 1}, 2);
 
 
-    std::cout << outputs[2][0];
+    std::cout << outputs[2][0] << std::endl;
 }
+
+void test_mlp_regression() {
+    int regressionExamplesSize = 4;
+    int regressionExampleSize = 1;
+    double *regressionExamples = new double[regressionExamplesSize * regressionExampleSize]{100, 200, 400, 500};
+    double **regressionDesiredOutputs = new double *[regressionExamplesSize * regressionExampleSize]{
+            new double[1]{200},
+            new double[1]{400},
+            new double[1]{800},
+            new double[1]{1000}
+    };
+    int modelStructSize = 3;
+    int *modelStruct = new int[modelStructSize]{3, 4, 1};
+
+    double ***model = mlp_regression_create_model(modelStruct, modelStructSize, regressionExamples,
+                                                  regressionExamplesSize,
+                                                  regressionExampleSize,
+                                                  regressionDesiredOutputs, 0.01, 10000);
+
+    double **outputs = mlp_regression_feed_forward(model, modelStruct, modelStructSize, new double[1]{300}, 1);
+    std::cout << outputs[2][0] << std::endl;
+}
+
 
 void test() {
     init();
@@ -446,6 +563,7 @@ void test() {
     test_linear_classification();
     test_create_linear_classification_model();
     test_mlp_classification();
+    test_mlp_regression();
 }
 
 int main() {
