@@ -1,4 +1,4 @@
-#include "mlp.h";
+#include "mlp.h"
 
 void init() {
     srand(static_cast <unsigned> (time(0)));
@@ -90,6 +90,7 @@ double **mlp_regression_feed_forward(double ***model, int *modelStruct, int mode
                     outputs[i][j] += outputs[i - 1][k] * model[i][j][k];
                 }
             }
+            outputs[i][j] = activation(outputs[i][j]);
         }
         outputs[i][modelStruct[i] - 1] = 1;
     }

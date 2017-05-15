@@ -61,7 +61,5 @@ double ***mlp_regression_create_model(int *modelStruct, int modelStructSize, dou
                                       int inputsSize,
                                       double **desiredOutputs, double learningRate, int epochs);
 
-}
-
 
 #endif //MACHINE_LEARNING_MLP_H
